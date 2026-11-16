@@ -8,7 +8,9 @@ import {
   ChevronDown,
   Loader2,
   Plus,
-  Brain
+  Brain,
+  Users,
+  TrendingUp
 } from 'lucide-react';
 import { ProjectManagerModal } from './ProjectManagerModal';
 
@@ -21,7 +23,9 @@ export const Header: React.FC = () => {
     isSidebarOpen,
     setIsSidebarOpen,
     openAdvisorForVideo,
-    createVideoWithAdvisor
+    createVideoWithAdvisor,
+    openAudienceSimulator,
+    openRetentionModal
   } = useApp();
 
   const [isProjectsModalOpen, setIsProjectsModalOpen] = useState(false);
@@ -109,6 +113,26 @@ export const Header: React.FC = () => {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
+          {/* Audience Simulator Button */}
+          <button
+            onClick={() => openAudienceSimulator()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/40 text-xs text-cyan-200 font-bold shadow-sm transition-all active:scale-95"
+            title="Abrir Simulador de Audiencia (Focus Group TikTok)"
+          >
+            <Users className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden lg:inline">Focus Group</span>
+          </button>
+
+          {/* Predictive Retention Curve Button */}
+          <button
+            onClick={() => openRetentionModal()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-950/40 hover:bg-violet-900/50 border border-violet-500/40 text-xs text-violet-200 font-bold shadow-sm transition-all active:scale-95"
+            title="Abrir Curva Predictiva de Retención (TikTok Studio Simulado)"
+          >
+            <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden xl:inline">Curva Retención</span>
+          </button>
+
           {/* Asesor de Contenido Button */}
           <button
             onClick={() => openAdvisorForVideo()}

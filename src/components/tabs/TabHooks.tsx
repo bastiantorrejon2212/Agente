@@ -13,7 +13,9 @@ import {
   TrendingUp,
   Brain,
   Check,
-  Film
+  CheckCircle2,
+  Film,
+  Users
 } from 'lucide-react';
 import type { HookItem } from '../../types';
 
@@ -29,7 +31,8 @@ export const TabHooks: React.FC = () => {
     finishBackgroundTask,
     backgroundTasks,
     setIsApiKeyModalOpen,
-    openAdvisorForVideo
+    openAdvisorForVideo,
+    openAudienceSimulator
   } = useApp();
 
   const [rawIdea, setRawIdea] = useState(currentVideo.rawIdea || '');
@@ -83,6 +86,18 @@ export const TabHooks: React.FC = () => {
     setCurrentVideoSelectedHook(combinedHookText);
     setActiveTab('script');
     showToast(`Hook transferido al guion de "${currentVideo.title}"`, 'success');
+  };
+
+  const handleSelectHookOnly = (hook: HookItem) => {
+    const combinedHookText = `VISUAL: ${hook.visualHook} | TEXTO: ${hook.textHook} | VOZ: ${hook.audioHook}`;
+    setCurrentVideoSelectedHook(combinedHookText);
+    showToast(`Hook "${hook.angleTitle}" marcado como principal`, 'success');
+  };
+
+  const handleTestInAudienceSimulator = (hook: HookItem) => {
+    const combinedHookText = `VISUAL: ${hook.visualHook} | TEXTO: ${hook.textHook} | VOZ: ${hook.audioHook}`;
+    setCurrentVideoSelectedHook(combinedHookText);
+    openAudienceSimulator();
   };
 
   const copyHookToClipboard = (hook: HookItem, cardIndex: number) => {
@@ -259,23 +274,44 @@ export const TabHooks: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {latestPackage.hooks.map((hook, index) => {
               const isCopied = copiedId === `card_${index}`;
+              const isSelected = Boolean(
+                currentVideo.selectedHook &&
+                (currentVideo.selectedHook.includes(hook.textHook) || currentVideo.selectedHook.includes(hook.audioHook))
+              );
 
               return (
                 <div
                   key={index}
-                  className="bg-zinc-900/90 border border-zinc-800 hover:border-zinc-700/80 rounded-2xl p-5 md:p-6 shadow-xl flex flex-col justify-between transition-all duration-200 group relative overflow-hidden"
+                  className={`rounded-2xl p-5 md:p-6 shadow-xl flex flex-col justify-between transition-all duration-200 group relative overflow-hidden ${
+                    isSelected
+                      ? 'bg-zinc-900 border-2 border-violet-500 shadow-violet-950/30'
+                      : 'bg-zinc-900/90 border border-zinc-800 hover:border-zinc-700/80'
+                  }`}
                 >
-                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-violet-500/40 to-transparent group-hover:via-cyan-400 transition-all" />
+                  <div
+                    className={`absolute top-0 left-0 right-0 h-1 transition-all ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-violet-500 via-cyan-400 to-violet-500'
+                        : 'bg-gradient-to-r from-transparent via-violet-500/40 to-transparent group-hover:via-cyan-400'
+                    }`}
+                  />
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${getAngleBadgeColor(
-                          hook.angleType
-                        )}`}
-                      >
-                        {hook.angleTitle}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${getAngleBadgeColor(
+                            hook.angleType
+                          )}`}
+                        >
+                          {hook.angleTitle}
+                        </span>
+                        {isSelected && (
+                          <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded-full bg-violet-600/30 text-violet-300 border border-violet-500/40">
+                            Principal
+                          </span>
+                        )}
+                      </div>
 
                       <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold">
                         <TrendingUp className="w-3 h-3" />
@@ -322,30 +358,54 @@ export const TabHooks: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 pt-4 mt-4 border-t border-zinc-800/80">
-                    <button
-                      onClick={() => copyHookToClipboard(hook, index)}
-                      className="px-3 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                      title="Copiar detalles del hook"
-                    >
-                      {isCopied ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">Copiado</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copiar</span>
-                        </>
-                      )}
-                    </button>
+                  <div className="flex items-center justify-between gap-2 pt-4 mt-4 border-t border-zinc-800/80 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => copyHookToClipboard(hook, index)}
+                        className="px-3 py-2 rounded-xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        title="Copiar detalles del hook"
+                      >
+                        {isCopied ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400">Copiado</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copiar</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => handleSelectHookOnly(hook)}
+                        className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors ${
+                          isSelected
+                            ? 'bg-violet-600/20 text-violet-300 border border-violet-500/40'
+                            : 'bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                        }`}
+                        title="Marcar como hook principal de este video"
+                      >
+                        <CheckCircle2 className={`w-3.5 h-3.5 ${isSelected ? 'text-violet-400' : 'text-zinc-500'}`} />
+                        <span>{isSelected ? 'Elegido' : 'Elegir'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleTestInAudienceSimulator(hook)}
+                        className="px-3 py-2 rounded-xl bg-zinc-950 hover:bg-cyan-950/40 border border-zinc-800 hover:border-cyan-500/40 text-zinc-400 hover:text-cyan-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        title="Probar este gancho en el Focus Group de TikTok"
+                      >
+                        <Users className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Focus Group</span>
+                      </button>
+                    </div>
 
                     <button
                       onClick={() => handleBuildScriptWithHook(hook)}
                       className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-violet-950/30 transition-all group-hover:scale-[1.02]"
                     >
-                      <span>Armar Guion de este Video</span>
+                      <span>Armar Guion</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>

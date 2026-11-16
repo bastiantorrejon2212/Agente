@@ -9,7 +9,9 @@ import {
   Type,
   X,
   Sliders,
-  Volume2
+  Volume2,
+  Clock,
+  Eye
 } from 'lucide-react';
 
 export const TeleprompterModal: React.FC = () => {
@@ -21,9 +23,24 @@ export const TeleprompterModal: React.FC = () => {
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [showEyeline, setShowEyeline] = useState(true);
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (isPlaying) {
+      interval = setInterval(() => {
+        setElapsedSeconds((s) => s + 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isPlaying]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -58,6 +75,11 @@ export const TeleprompterModal: React.FC = () => {
 
       const pixelsPerSecond = scrollSpeed * 28;
       scrollContainer.scrollTop += pixelsPerSecond * delta;
+
+      const maxScroll = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+      if (maxScroll > 0) {
+        setScrollProgress(Math.min(100, Math.round((scrollContainer.scrollTop / maxScroll) * 100)));
+      }
 
       if (
         scrollContainer.scrollTop + scrollContainer.clientHeight >=
@@ -101,6 +123,8 @@ export const TeleprompterModal: React.FC = () => {
 
   const handleReset = () => {
     setIsPlaying(false);
+    setElapsedSeconds(0);
+    setScrollProgress(0);
     if (containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
@@ -115,6 +139,25 @@ export const TeleprompterModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col select-none overflow-hidden animate-fade-in">
+      {/* Top Scroll Progress Line */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-zinc-900 z-30">
+        <div
+          className="h-full bg-gradient-to-r from-violet-500 via-cyan-400 to-emerald-400 transition-all duration-150"
+          style={{ width: `${scrollProgress}%` }}
+        />
+      </div>
+
+      {/* Central Eyeline Reference Line */}
+      {showEyeline && (
+        <div className="pointer-events-none absolute top-1/2 left-0 right-0 -translate-y-1/2 z-10 flex items-center justify-between px-8 opacity-40">
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
+          <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 px-3 select-none">
+            Nivel de Mirada a Lente
+          </span>
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
+        </div>
+      )}
+
       {/* Top Floating Controls Bar */}
       <div className="bg-zinc-950/90 border-b border-zinc-800 px-4 py-3 flex items-center justify-between gap-4 backdrop-blur-md z-20">
         <div className="flex items-center gap-3">
@@ -122,17 +165,38 @@ export const TeleprompterModal: React.FC = () => {
             <Volume2 className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-zinc-100 truncate max-w-[200px] md:max-w-md">
+            <h2 className="text-sm font-bold text-zinc-100 truncate max-w-[180px] md:max-w-md">
               {teleprompterScript.title || 'Teleprompter Pro'}
             </h2>
-            <p className="text-[11px] text-zinc-400">
-              Pulsa Espacio para Play / Pausa • Esc para salir
+            <p className="text-[11px] text-zinc-400 hidden sm:block">
+              Espacio: Play/Pausa • Esc: Salir
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 md:gap-3">
+          {/* Live Elapsed Stopwatch */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-mono font-bold">
+            <Clock className="w-3.5 h-3.5 text-cyan-400" />
+            <span className={elapsedSeconds > 50 ? 'text-amber-400' : 'text-zinc-200'}>
+              00:{elapsedSeconds < 10 ? '0' : ''}{elapsedSeconds}s
+            </span>
+          </div>
+
+          {/* Eyeline Guide Toggle */}
+          <button
+            onClick={() => setShowEyeline(!showEyeline)}
+            className={`p-2 rounded-xl border text-xs transition-colors ${
+              showEyeline
+                ? 'bg-violet-600/30 border-violet-500 text-violet-300'
+                : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'
+            }`}
+            title="Alternar Guía de Mirada Central (Lente)"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+
           {/* Speed Slider */}
           <div className="hidden sm:flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl text-xs text-zinc-300">
             <Sliders className="w-3.5 h-3.5 text-cyan-400" />

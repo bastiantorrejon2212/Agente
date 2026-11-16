@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { auditDraft, uploadToGoogleFileAPI } from '../../services/geminiService';
 import { LoadingSkeleton } from '../LoadingSkeleton';
+import { RetentionCurveGraph } from '../RetentionCurveGraph';
 import type { AuditorResult, Script } from '../../types';
 import {
   Scissors,
@@ -12,7 +13,8 @@ import {
   Save,
   TrendingDown,
   ShieldAlert,
-  Film
+  Film,
+  TrendingUp
 } from 'lucide-react';
 
 export const TabDraftAuditor: React.FC = () => {
@@ -26,7 +28,8 @@ export const TabDraftAuditor: React.FC = () => {
     startBackgroundTask,
     finishBackgroundTask,
     backgroundTasks,
-    setIsApiKeyModalOpen
+    setIsApiKeyModalOpen,
+    openRetentionModal
   } = useApp();
 
   const [mode, setMode] = useState<'text' | 'file'>('text');
@@ -314,20 +317,32 @@ export const TabDraftAuditor: React.FC = () => {
                 </h2>
               </div>
 
-              {/* Retention Score Gauge */}
-              <div
-                className={`px-4 py-2 rounded-2xl border flex items-center gap-3 ${getScoreColor(
-                  latestResult.retentionScore
-                )}`}
-              >
-                <TrendingDown className="w-5 h-5 shrink-0" />
-                <div>
-                  <div className="text-2xl font-black font-mono leading-none">
-                    {latestResult.retentionScore} / 100
+              {/* Retention Score Gauge & Quick Retention Curve Button */}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => openRetentionModal()}
+                  className="px-3.5 py-2.5 rounded-2xl bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/40 text-cyan-200 text-xs font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95"
+                  title="Simular la Curva Predictiva Segundo a Segundo (TikTok Studio)"
+                >
+                  <TrendingUp className="w-4 h-4 text-cyan-400" />
+                  <span>Curva Predictiva</span>
+                </button>
+
+                <div
+                  className={`px-4 py-2 rounded-2xl border flex items-center gap-3 ${getScoreColor(
+                    latestResult.retentionScore
+                  )}`}
+                >
+                  <TrendingDown className="w-5 h-5 shrink-0" />
+                  <div>
+                    <div className="text-2xl font-black font-mono leading-none">
+                      {latestResult.retentionScore} / 100
+                    </div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider">
+                      Score de Retención
+                    </span>
                   </div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider">
-                    Score de Retención
-                  </span>
                 </div>
               </div>
             </div>
@@ -368,6 +383,28 @@ export const TabDraftAuditor: React.FC = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Predictive Retention Graph Inline */}
+            {currentVideo.predictiveRetention && (
+              <div className="pt-4 border-t border-zinc-800">
+                <div className="flex items-center justify-between pb-3">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-cyan-400" />
+                    <h3 className="text-sm font-bold text-zinc-100">
+                      Curva Predictiva de Retención Algorítmica (TikTok Studio)
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openRetentionModal()}
+                    className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+                  >
+                    Recalcular o Expandir ➜
+                  </button>
+                </div>
+                <RetentionCurveGraph report={currentVideo.predictiveRetention} />
               </div>
             )}
           </div>

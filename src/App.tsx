@@ -14,6 +14,8 @@ import { TeleprompterModal } from './components/TeleprompterModal';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { ToastContainer } from './components/ToastContainer';
 import { ContentAdvisorModal } from './components/ContentAdvisorModal';
+import { AudienceSimulatorModal } from './components/AudienceSimulatorModal';
+import { PredictiveRetentionModal } from './components/PredictiveRetentionModal';
 
 const MainLayout: React.FC = () => {
   const { activeTab } = useApp();
@@ -65,6 +67,8 @@ const MainLayout: React.FC = () => {
       <TeleprompterModal />
       <ApiKeyModal />
       <ContentAdvisorModal />
+      <AudienceSimulatorModal />
+      <PredictiveRetentionModal />
       <ToastContainer />
     </div>
   );

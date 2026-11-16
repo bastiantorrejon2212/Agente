@@ -133,9 +133,74 @@ export interface SEOResult {
   pinnedComments: string[];
 }
 
+export interface PersonaFeedback {
+  personaName: 'Scroller Compulsivo' | 'Escéptico de Comentarios' | 'Compartidor Frecuente';
+  avatarEmoji: string;
+  demographic: string;
+  actionTaken: 'Deslizó (Swipe)' | 'Se Quedó (Stay)' | 'Comentó (Comment)' | 'Compartió (Share)' | 'Guardó (Save)';
+  timestampOrTrigger: string;
+  immediateReaction: string;
+  quote: string;
+  whyActionTaken: string;
+  improvementTip: string;
+}
+
+export interface AudienceSimulationResult {
+  overallSurvivalScore: number; // 0 - 100%
+  verdictSummary: string;
+  personas: PersonaFeedback[];
+  keyVulnerabilities: string[];
+  actionableTweaks: {
+    hookTweak: string;
+    bodyPacingTweak: string;
+    ctaOrLoopTweak: string;
+  };
+  simulatedAt: number;
+}
+
+export interface RetentionDataPoint {
+  second: number;
+  timestamp: string;
+  percentage: number;
+  benchmarkPercentage: number;
+  eventType?: 'hook' | 'drop' | 'spike' | 'loop' | 'neutral';
+  eventLabel?: string;
+  annotation?: string;
+}
+
+export interface RetentionDropOffPoint {
+  timestamp: string;
+  second: number;
+  severity: 'critica' | 'media' | 'leve';
+  reason: string;
+  fixAdvice: string;
+}
+
+export interface RetentionSpikeMoment {
+  timestamp: string;
+  second: number;
+  reason: string;
+  driver: string;
+}
+
+export interface PredictiveRetentionReport {
+  hookSurvivalRate: number;
+  averageWatchTimeSeconds: number;
+  totalDurationSeconds: number;
+  averageWatchPercentage: number;
+  completedWatchRate: number;
+  rewatchSpikeRate: number;
+  retentionCurve: RetentionDataPoint[];
+  dropOffPoints: RetentionDropOffPoint[];
+  spikeMoments: RetentionSpikeMoment[];
+  loopViabilityScore: number;
+  verdictSummary: string;
+  calculatedAt: number;
+}
+
 export interface BackgroundTask {
   id: string;
-  type: 'hooks' | 'script' | 'audit' | 'rough_cut' | 'final_quality' | 'seo';
+  type: 'hooks' | 'script' | 'audit' | 'rough_cut' | 'final_quality' | 'seo' | 'simulation' | 'retention_curve';
   title: string;
   status: 'running' | 'completed' | 'error';
   progressLabel: string;
@@ -193,6 +258,8 @@ export interface VideoProject {
   roughCut: RoughCutResult | null;
   finalQuality: FinalQualityResult | null;
   seo: SEOResult | null;
+  audienceSimulation?: AudienceSimulationResult | null;
+  predictiveRetention?: PredictiveRetentionReport | null;
 }
 
 // Retrocompatibilidad de tipo

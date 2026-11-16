@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { auditRoughCut, uploadToGoogleFileAPI } from '../../services/geminiService';
 import { LoadingSkeleton } from '../LoadingSkeleton';
@@ -12,7 +12,8 @@ import {
   ArrowRightLeft,
   Volume2,
   ZoomIn,
-  Film
+  Film,
+  Play
 } from 'lucide-react';
 
 export const TabRoughCut: React.FC = () => {
@@ -32,10 +33,42 @@ export const TabRoughCut: React.FC = () => {
   const [timelineDescription, setTimelineDescription] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [latestResult, setLatestResult] = useState<RoughCutResult | null>(currentVideo.roughCut);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const videoPlayerRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     setLatestResult(currentVideo.roughCut);
   }, [currentVideo.id, currentVideo.roughCut]);
+
+  useEffect(() => {
+    if (selectedFile && selectedFile.type.startsWith('video/')) {
+      const url = URL.createObjectURL(selectedFile);
+      setVideoPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setVideoPreviewUrl(null);
+    }
+  }, [selectedFile]);
+
+  const parseTimestampToSeconds = (ts: string): number => {
+    const clean = ts.trim().toLowerCase().replace('s', '');
+    if (clean.includes(':')) {
+      const parts = clean.split(':').map((p) => parseFloat(p));
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const handleJumpToTimestamp = (timestampStr: string) => {
+    const secs = parseTimestampToSeconds(timestampStr);
+    if (videoPlayerRef.current) {
+      videoPlayerRef.current.currentTime = secs;
+      videoPlayerRef.current.play().catch(() => {});
+      showToast(`Reproduciendo en el segundo ${secs}s`, 'info');
+    }
+  };
 
   const isAnalyzing = backgroundTasks.some(
     (t) => t.type === 'rough_cut' && t.status === 'running'
@@ -242,6 +275,32 @@ export const TabRoughCut: React.FC = () => {
         />
       )}
 
+      {/* Video Preview Player Panel */}
+      {videoPreviewUrl && (
+        <div className="p-4 md:p-5 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-zinc-800">
+            <div className="flex items-center gap-2">
+              <Play className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+                Reproductor Interactivo de Revisión
+              </h3>
+            </div>
+            <span className="text-[11px] text-cyan-400 font-medium">
+              💡 Haz clic en cualquier timestamp para saltar al segundo exacto
+            </span>
+          </div>
+
+          <div className="relative aspect-video max-h-[380px] w-full rounded-xl overflow-hidden bg-black flex items-center justify-center border border-zinc-800">
+            <video
+              ref={videoPlayerRef}
+              src={videoPreviewUrl}
+              controls
+              className="w-full h-full object-contain"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Results */}
       {latestResult && !isAnalyzing && (
         <div className="space-y-6">
@@ -275,9 +334,15 @@ export const TabRoughCut: React.FC = () => {
                   className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="font-mono font-bold px-2 py-1 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                      {cut.timestamp}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleJumpToTimestamp(cut.timestamp)}
+                      className="font-mono font-bold px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      title="Saltar a este segundo en el reproductor"
+                    >
+                      <Play className="w-2.5 h-2.5 text-rose-400" />
+                      <span>{cut.timestamp}</span>
+                    </button>
                     <span className="text-zinc-300 font-medium">{cut.issue}</span>
                   </div>
                   <span className="text-rose-400 font-bold shrink-0">
@@ -311,7 +376,15 @@ export const TabRoughCut: React.FC = () => {
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-zinc-400">{ins.timestamp}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleJumpToTimestamp(ins.timestamp)}
+                        className="font-mono font-bold px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                        title="Saltar a este segundo en el reproductor"
+                      >
+                        <Play className="w-2.5 h-2.5 text-cyan-400" />
+                        <span>{ins.timestamp}</span>
+                      </button>
                       <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-300">
                         {ins.type}
                       </span>

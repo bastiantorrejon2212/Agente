@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Film, Plus, Trash2, Edit2, Check, X, ArrowRight, Clock, Brain, Sparkles } from 'lucide-react';
+import { Film, Plus, Trash2, Edit2, Check, X, ArrowRight, Clock, Brain, Sparkles, CopyPlus, Download, Upload } from 'lucide-react';
 import type { ScriptStatus } from '../types';
 
 interface ProjectManagerModalProps {
@@ -18,7 +18,10 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
     deleteVideoProject,
     setActiveTab,
     createVideoWithAdvisor,
-    openAdvisorForVideo
+    openAdvisorForVideo,
+    duplicateVideoProject,
+    exportBackupJSON,
+    importBackupJSON
   } = useApp();
 
   const [newVideoTitle, setNewVideoTitle] = useState('');
@@ -230,6 +233,14 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
 
+                      <button
+                        onClick={() => duplicateVideoProject(vid.id)}
+                        className="p-1.5 text-zinc-400 hover:text-violet-400 rounded-lg hover:bg-zinc-800 transition-colors"
+                        title="Duplicar video (Variante B)"
+                      >
+                        <CopyPlus className="w-3.5 h-3.5" />
+                      </button>
+
                       {videoProjects.length > 1 && (
                         <button
                           onClick={() => deleteVideoProject(vid.id)}
@@ -260,19 +271,52 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
           })}
         </div>
 
-        <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
-          <button
-            onClick={() => {
-              setActiveTab('boveda');
-              onClose();
-            }}
-            className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
-          >
-            Ver Tablero Kanban General ➜
-          </button>
+        <div className="pt-3 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => {
+                setActiveTab('boveda');
+                onClose();
+              }}
+              className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+            >
+              Ver Tablero Kanban ➜
+            </button>
+            <span className="text-zinc-700 hidden sm:inline">•</span>
+            <button
+              type="button"
+              onClick={exportBackupJSON}
+              className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition-colors"
+              title="Descargar copia de seguridad en JSON de todos tus videos"
+            >
+              <Download className="w-3.5 h-3.5 text-violet-400" />
+              <span>Copia JSON</span>
+            </button>
+            <label className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1 cursor-pointer transition-colors">
+              <Upload className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Restaurar</span>
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      const content = ev.target?.result as string;
+                      if (content) importBackupJSON(content);
+                    };
+                    reader.readAsText(file);
+                  }
+                }}
+              />
+            </label>
+          </div>
+
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-colors"
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold transition-colors"
           >
             Cerrar
           </button>

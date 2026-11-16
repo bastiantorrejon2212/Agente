@@ -10,7 +10,8 @@ import {
   Clock,
   ArrowRight,
   Plus,
-  Film
+  Film,
+  Brain
 } from 'lucide-react';
 
 interface ColumnDef {
@@ -37,7 +38,8 @@ export const TabBovedaKanban: React.FC = () => {
     createVideoProject,
     setTeleprompterScript,
     setActiveTab,
-    showToast
+    showToast,
+    openAdvisorForVideo
   } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -246,6 +248,14 @@ export const TabBovedaKanban: React.FC = () => {
                               <Play className="w-3.5 h-3.5" />
                             </button>
                           )}
+
+                          <button
+                            onClick={() => openAdvisorForVideo(video.id)}
+                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-cyan-400 transition-colors"
+                            title="Consultar al Asesor de Contenido"
+                          >
+                            <Brain className="w-3.5 h-3.5" />
+                          </button>
 
                           <button
                             onClick={() => handleOpenVideoProject(video, hasScript ? 'script' : 'hooks')}

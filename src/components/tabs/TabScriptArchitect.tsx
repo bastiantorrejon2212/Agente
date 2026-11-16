@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { generateScript } from '../../services/geminiService';
 import { calculateSpeed, parseDurationSeconds } from '../../utils/speedMeter';
 import { LoadingSkeleton } from '../LoadingSkeleton';
+import { RetentionCurveGraph } from '../RetentionCurveGraph';
 import type { Script, ScriptBlock, BrollItem } from '../../types';
 import {
   Clapperboard,
@@ -17,7 +18,14 @@ import {
   Square,
   Clock,
   Film,
-  Brain
+  Brain,
+  ArrowUp,
+  ArrowDown,
+  CopyPlus,
+  Download,
+  CheckCircle2,
+  Users,
+  TrendingUp
 } from 'lucide-react';
 
 export const TabScriptArchitect: React.FC = () => {
@@ -31,7 +39,9 @@ export const TabScriptArchitect: React.FC = () => {
     finishBackgroundTask,
     backgroundTasks,
     setIsApiKeyModalOpen,
-    openAdvisorForVideo
+    openAdvisorForVideo,
+    openAudienceSimulator,
+    openRetentionModal
   } = useApp();
 
   const [hookInput, setHookInput] = useState(currentVideo.selectedHook || '');
@@ -121,7 +131,7 @@ export const TabScriptArchitect: React.FC = () => {
     };
 
     setCurrentScript(updatedScript);
-    setCurrentVideoScript(updatedScript);
+    setCurrentVideoScript(updatedScript, true);
   };
 
   const handleAddBlock = () => {
@@ -156,8 +166,71 @@ export const TabScriptArchitect: React.FC = () => {
     };
 
     setCurrentScript(updatedScript);
-    setCurrentVideoScript(updatedScript);
+    setCurrentVideoScript(updatedScript, true);
     showToast('Nuevo bloque agregado', 'info');
+  };
+
+  const recalculateTimeRanges = (blocks: ScriptBlock[]): ScriptBlock[] => {
+    let currentSecond = 0;
+    return blocks.map((b) => {
+      const dur = b.durationSeconds || 4;
+      const start = currentSecond;
+      const end = start + dur;
+      currentSecond = end;
+      const formatSec = (s: number) => `0:${s < 10 ? '0' : ''}${s}`;
+      return {
+        ...b,
+        durationSeconds: dur,
+        timeRange: `${formatSec(start)} - ${formatSec(end)}`
+      };
+    });
+  };
+
+  const handleMoveBlock = (index: number, direction: 'up' | 'down') => {
+    if (!currentScript) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= currentScript.blocks.length) return;
+
+    const newBlocks = [...currentScript.blocks];
+    const temp = newBlocks[index];
+    newBlocks[index] = newBlocks[targetIndex];
+    newBlocks[targetIndex] = temp;
+
+    const reTimedBlocks = recalculateTimeRanges(newBlocks);
+    const updatedScript: Script = {
+      ...currentScript,
+      blocks: reTimedBlocks,
+      updatedAt: Date.now()
+    };
+
+    setCurrentScript(updatedScript);
+    setCurrentVideoScript(updatedScript, true);
+    showToast(`Bloque movido hacia ${direction === 'up' ? 'arriba' : 'abajo'}`, 'info');
+  };
+
+  const handleDuplicateBlock = (blockId: string) => {
+    if (!currentScript) return;
+    const idx = currentScript.blocks.findIndex((b) => b.id === blockId);
+    if (idx === -1) return;
+    const original = currentScript.blocks[idx];
+    const duplicated: ScriptBlock = {
+      ...original,
+      id: 'blk_dup_' + Date.now(),
+      spokenText: `${original.spokenText}`
+    };
+    const newBlocks = [...currentScript.blocks];
+    newBlocks.splice(idx + 1, 0, duplicated);
+
+    const reTimedBlocks = recalculateTimeRanges(newBlocks);
+    const updatedScript: Script = {
+      ...currentScript,
+      blocks: reTimedBlocks,
+      updatedAt: Date.now()
+    };
+
+    setCurrentScript(updatedScript);
+    setCurrentVideoScript(updatedScript, true);
+    showToast('Bloque duplicado', 'info');
   };
 
   const handleDeleteBlock = (blockId: string) => {
@@ -166,14 +239,16 @@ export const TabScriptArchitect: React.FC = () => {
       showToast('El guion debe tener al menos un bloque', 'error');
       return;
     }
+    const filtered = currentScript.blocks.filter((b) => b.id !== blockId);
+    const reTimedBlocks = recalculateTimeRanges(filtered);
     const updatedScript: Script = {
       ...currentScript,
-      blocks: currentScript.blocks.filter((b) => b.id !== blockId),
+      blocks: reTimedBlocks,
       updatedAt: Date.now()
     };
 
     setCurrentScript(updatedScript);
-    setCurrentVideoScript(updatedScript);
+    setCurrentVideoScript(updatedScript, true);
     showToast('Bloque eliminado', 'info');
   };
 
@@ -188,7 +263,7 @@ export const TabScriptArchitect: React.FC = () => {
       updatedAt: Date.now()
     };
     setCurrentScript(updatedScript);
-    setCurrentVideoScript(updatedScript);
+    setCurrentVideoScript(updatedScript, true);
   };
 
   const handleAddBrollItem = () => {
@@ -205,13 +280,12 @@ export const TabScriptArchitect: React.FC = () => {
       updatedAt: Date.now()
     };
     setCurrentScript(updatedScript);
-    setCurrentVideoScript(updatedScript);
+    setCurrentVideoScript(updatedScript, true);
   };
 
   const handleManualSave = () => {
     if (!currentScript) return;
-    setCurrentVideoScript(currentScript);
-    showToast(`Guion guardado en "${currentVideo.title}"`, 'success');
+    setCurrentVideoScript(currentScript, false);
   };
 
   const handleOpenTeleprompter = () => {
@@ -245,6 +319,62 @@ ${currentScript.brollChecklist.map((br) => `[${br.completed ? 'X' : ' '}] ${br.c
     showToast('Guion completo copiado al portapapeles', 'success');
   };
 
+  const totalDurationSeconds = currentScript
+    ? currentScript.blocks.reduce((acc, b) => acc + (b.durationSeconds || 4), 0)
+    : 0;
+  const totalWords = currentScript
+    ? currentScript.blocks.reduce((acc, b) => acc + (b.wordsCount || 0), 0)
+    : 0;
+  const avgWordsPerSec = totalDurationSeconds > 0
+    ? (totalWords / totalDurationSeconds).toFixed(1)
+    : '0';
+
+  const handleDownloadProductionSheet = () => {
+    if (!currentScript) return;
+    const markdown = `# FICHA DE PRODUCCIÓN TIKTOK — ${currentVideo.title}
+Fecha: ${new Date().toLocaleDateString()}
+Duración Total Estimada: ${totalDurationSeconds}s (${currentScript.blocks.length} bloques)
+Ritmo Promedio: ${avgWordsPerSec} palabras/segundo
+Atmósfera Musical: ${currentScript.musicAtmosphere}
+
+## 1. TRINIDAD DEL GANCHO (0.0s - 0.03s)
+- Resumen del Gancho: ${currentScript.hookSummary}
+- Premisa Inicial: ${currentVideo.rawIdea || 'No especificada'}
+
+## 2. GUION SEGUNDO A SEGUNDO
+${currentScript.blocks
+  .map(
+    (b, i) => `
+### Bloque ${i + 1} [${b.timeRange}] (${b.durationSeconds}s — ${b.speedStatus.toUpperCase()})
+- 🎥 Cámara y Acción: ${b.cameraAction}
+- 🎙️ Locución / Voz: "${b.spokenText}"
+- ⚡ Pantalla y SFX: ${b.overlayTextSfx}
+`
+  )
+  .join('')}
+
+## 3. REMATE EN BUCLE (LOOP)
+${currentScript.infiniteLoopTrick}
+
+## 4. CHECKLIST DE TOMAS B-ROLL
+${currentScript.brollChecklist
+  .map((item, i) => `- [${item.completed ? 'X' : ' '}] Toma ${i + 1}: ${item.cameraAngle} — ${item.shotDescription}`)
+  .join('\n')}
+
+---
+Generado con Agente IA TikTok (VibeDirector Pro)
+`;
+
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Ficha_Produccion_${currentVideo.title.replace(/\s+/g, '_')}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('Ficha de producción descargada (.md)', 'success');
+  };
+
   const brollCompletedCount = currentScript?.brollChecklist.filter((b) => b.completed).length || 0;
   const brollTotalCount = currentScript?.brollChecklist.length || 0;
 
@@ -270,6 +400,24 @@ ${currentScript.brollChecklist.map((br) => `[${br.completed ? 'X' : ' '}] ${br.c
 
         {currentScript && (
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => openRetentionModal()}
+              className="px-3.5 py-2 rounded-xl bg-violet-950/40 hover:bg-violet-900/50 border border-violet-500/40 text-violet-200 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+              title="Calcular o ver la Curva Predictiva de Retención (TikTok Studio Simulado)"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Curva de Retención</span>
+            </button>
+
+            <button
+              onClick={() => openAudienceSimulator()}
+              className="px-3.5 py-2 rounded-xl bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/40 text-cyan-200 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+              title="Testear guion con Focus Group de 3 espectadores"
+            >
+              <Users className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Simular Audiencia</span>
+            </button>
+
             <button
               onClick={handleOpenTeleprompter}
               className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
@@ -385,6 +533,14 @@ ${currentScript.brollChecklist.map((br) => `[${br.completed ? 'X' : ' '}] ${br.c
 
               <div className="flex items-center gap-2">
                 <button
+                  onClick={handleDownloadProductionSheet}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-xs text-violet-300 hover:text-violet-200 font-semibold flex items-center gap-1.5 transition-colors"
+                  title="Descargar ficha completa de producción en Markdown"
+                >
+                  <Download className="w-3.5 h-3.5 text-violet-400" />
+                  <span>Ficha de Producción (.md)</span>
+                </button>
+                <button
                   onClick={handleCopyAll}
                   className="px-3 py-1.5 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 font-semibold flex items-center gap-1.5 transition-colors"
                 >
@@ -408,6 +564,59 @@ ${currentScript.brollChecklist.map((br) => `[${br.completed ? 'X' : ' '}] ${br.c
                 </span>
                 <p className="text-zinc-200 font-medium">{currentScript.musicAtmosphere}</p>
               </div>
+            </div>
+          </div>
+
+          {/* Live Duration & Speech Velocity Metrics Bar */}
+          <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-lg flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-5 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-cyan-400" />
+                <span className="text-xs text-zinc-400">Duración Real:</span>
+                <strong className={`text-sm font-mono font-bold ${
+                  totalDurationSeconds > 60 ? 'text-amber-400' : 'text-emerald-400'
+                }`}>
+                  {totalDurationSeconds}s
+                </strong>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400">Bloques:</span>
+                <span className="text-xs font-mono font-semibold text-zinc-200">
+                  {currentScript.blocks.length} cortes
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400">Total Palabras:</span>
+                <span className="text-xs font-mono font-semibold text-zinc-200">
+                  {totalWords} palabras
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400">Ritmo Medio:</span>
+                <span className="text-xs font-mono font-bold text-violet-400">
+                  {avgWordsPerSec} pal/s
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {totalDurationSeconds >= 20 && totalDurationSeconds <= 55 ? (
+                <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Duración ideal para TikTok</span>
+                </span>
+              ) : totalDurationSeconds > 55 ? (
+                <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-semibold">
+                  ⚠️ Cuidado: +55s exige retención extrema
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[11px] font-semibold">
+                  ⚡ Formato ultrarrápido (alta retención)
+                </span>
+              )}
             </div>
           </div>
 
@@ -438,11 +647,11 @@ ${currentScript.brollChecklist.map((br) => `[${br.completed ? 'X' : ' '}] ${br.c
                     <th className="py-3 px-4">Voz en Off / Locución</th>
                     <th className="py-3 px-3 w-48">Velocidad Hablada</th>
                     <th className="py-3 px-3 w-64">Texto Pantalla + SFX</th>
-                    <th className="py-3 px-2 w-10 text-center"></th>
+                    <th className="py-3 px-3 w-28 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
-                  {currentScript.blocks.map((block) => {
+                  {currentScript.blocks.map((block, idx) => {
                     const speed = calculateSpeed(block.spokenText, block.durationSeconds);
 
                     return (
@@ -507,14 +716,39 @@ ${currentScript.brollChecklist.map((br) => `[${br.completed ? 'X' : ' '}] ${br.c
                           />
                         </td>
 
-                        <td className="py-3 px-2 align-top text-center">
-                          <button
-                            onClick={() => handleDeleteBlock(block.id)}
-                            className="p-1.5 text-zinc-600 hover:text-rose-400 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                            title="Eliminar bloque"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <td className="py-3 px-3 align-top text-center">
+                          <div className="flex items-center justify-center gap-1 pt-1">
+                            <button
+                              onClick={() => handleMoveBlock(idx, 'up')}
+                              disabled={idx === 0}
+                              className="p-1 rounded text-zinc-500 hover:text-cyan-400 disabled:opacity-20 transition-colors"
+                              title="Subir bloque"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleMoveBlock(idx, 'down')}
+                              disabled={idx === currentScript.blocks.length - 1}
+                              className="p-1 rounded text-zinc-500 hover:text-cyan-400 disabled:opacity-20 transition-colors"
+                              title="Bajar bloque"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDuplicateBlock(block.id)}
+                              className="p-1 rounded text-zinc-500 hover:text-violet-400 transition-colors"
+                              title="Duplicar bloque"
+                            >
+                              <CopyPlus className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBlock(block.id)}
+                              className="p-1 rounded text-zinc-500 hover:text-rose-400 transition-colors"
+                              title="Eliminar bloque"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -596,6 +830,28 @@ ${currentScript.brollChecklist.map((br) => `[${br.completed ? 'X' : ' '}] ${br.c
               ))}
             </div>
           </div>
+
+          {/* Predictive Retention Curve Section */}
+          {currentVideo.predictiveRetention && (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-zinc-100">
+                    Curva Predictiva de Retención Algorítmica (TikTok Studio)
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openRetentionModal()}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
+                >
+                  Recalcular o Expandir ➜
+                </button>
+              </div>
+              <RetentionCurveGraph report={currentVideo.predictiveRetention} />
+            </div>
+          )}
         </div>
       )}
     </div>

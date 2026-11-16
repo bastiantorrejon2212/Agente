@@ -35,6 +35,7 @@ export const ContentAdvisorModal: React.FC = () => {
     currentVideo,
     creatorProfile,
     addAdvisorMessage,
+    resetAdvisorChat,
     applyAdvisorSynthesis,
     setActiveTab,
     showToast,
@@ -78,6 +79,9 @@ export const ContentAdvisorModal: React.FC = () => {
       timestamp: Date.now()
     };
 
+    if (!currentVideo.advisorChat || currentVideo.advisorChat.length === 0) {
+      addAdvisorMessage(currentVideo.id, INITIAL_GREETING);
+    }
     addAdvisorMessage(currentVideo.id, userMsg);
     setInput('');
     setIsLoading(true);
@@ -130,8 +134,7 @@ export const ContentAdvisorModal: React.FC = () => {
       id: 'msg_welcome_' + Date.now(),
       timestamp: Date.now()
     };
-    currentVideo.advisorChat = [freshGreeting];
-    addAdvisorMessage(currentVideo.id, freshGreeting);
+    resetAdvisorChat(currentVideo.id, freshGreeting);
     showToast('Sesión de asesoría reiniciada', 'info');
   };
 

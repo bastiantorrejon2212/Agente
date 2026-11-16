@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { auditFinalQuality, uploadToGoogleFileAPI } from '../../services/geminiService';
 import { LoadingSkeleton } from '../LoadingSkeleton';
@@ -10,7 +10,8 @@ import {
   CheckCircle,
   AlertTriangle,
   Bookmark,
-  Film
+  Film,
+  Play
 } from 'lucide-react';
 
 export const TabFinalQuality: React.FC = () => {
@@ -31,10 +32,22 @@ export const TabFinalQuality: React.FC = () => {
   const [videoDescription, setVideoDescription] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [latestResult, setLatestResult] = useState<FinalQualityResult | null>(currentVideo.finalQuality);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const videoPlayerRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     setLatestResult(currentVideo.finalQuality);
   }, [currentVideo.id, currentVideo.finalQuality]);
+
+  useEffect(() => {
+    if (selectedFile && selectedFile.type.startsWith('video/')) {
+      const url = URL.createObjectURL(selectedFile);
+      setVideoPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setVideoPreviewUrl(null);
+    }
+  }, [selectedFile]);
 
   const isEvaluating = backgroundTasks.some(
     (t) => t.type === 'final_quality' && t.status === 'running'
@@ -247,6 +260,26 @@ export const TabFinalQuality: React.FC = () => {
       {/* Results View */}
       {latestResult && !isEvaluating && (
         <div className="space-y-6">
+          {/* Video Preview Player Panel */}
+          {videoPreviewUrl && (
+            <div className="p-4 md:p-5 rounded-2xl bg-zinc-900 border border-zinc-800 shadow-xl space-y-3">
+              <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                <Play className="w-4 h-4 text-cyan-400" />
+                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wider">
+                  Reproductor de Verificación Final
+                </h3>
+              </div>
+              <div className="relative aspect-video max-h-[380px] w-full rounded-xl overflow-hidden bg-black flex items-center justify-center border border-zinc-800">
+                <video
+                  ref={videoPlayerRef}
+                  src={videoPreviewUrl}
+                  controls
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Main Verdict Hero Card */}
           <div
             className={`p-6 md:p-8 rounded-3xl border shadow-2xl relative overflow-hidden ${

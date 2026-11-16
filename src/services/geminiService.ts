@@ -12,7 +12,9 @@ import type {
   SEOResult,
   BrollItem,
   AdvisorMessage,
-  AdvisorSynthesis
+  AdvisorSynthesis,
+  AudienceSimulationResult,
+  PredictiveRetentionReport
 } from '../types';
 import { calculateSpeed, parseDurationSeconds } from '../utils/speedMeter';
 
@@ -962,3 +964,324 @@ Responde como VibeDirector analizando la respuesta del creador. Aporta valor est
     synthesis: parsed.synthesis
   };
 }
+
+// 8. SIMULADOR DE AUDIENCIA SINTÉTICA (FOCUS GROUP DE TIKTOK MULTI-PERSONA)
+export async function simulateAudience(
+  contentToTest: {
+    hook?: string;
+    scriptText?: string;
+    topic?: string;
+  },
+  adn: CreatorADN
+): Promise<AudienceSimulationResult> {
+  const ai = getGenAIClient(adn.apiKey);
+  const model = getResolvedModel(adn);
+  const systemPrompt = buildFullSystemPrompt(adn);
+
+  const simulationSystemInstruction = `${systemPrompt}
+
+====================================================================
+MODO ACTIVO: SIMULADOR DE AUDIENCIA SINTÉTICA (FOCUS GROUP PRE-RODAJE)
+====================================================================
+Tu misión es simular el comportamiento psicológico y de navegación de 3 arquetipos de usuarios reales en TikTok, enfrentados al contenido del creador antes de que gaste tiempo grabando o subiendo el video.
+
+LOS 3 ARQUETIPOS QUE DEBES SIMULAR:
+1. "Scroller Compulsivo":
+   - Demografía: 18-24 años, sobreestimulado, dedo listo para deslizar.
+   - Atención crítica: del segundo 0.0 al segundo 2.0.
+   - Veredicto: 'Deslizó (Swipe)' o 'Se Quedó (Stay)'.
+   - Trigger exacto y frase honesta en primera persona de su cerebro.
+
+2. "Escéptico de Comentarios":
+   - Demografía: 25-34 años, alérgico a influencers falsos y publicidad encubierta.
+   - Veredicto: 'Comentó (Comment)', 'Deslizó (Swipe)' o 'Se Quedó (Stay)'.
+   - El comentario exacto que dejaría para confrontar o debatir.
+
+3. "Compartidor Frecuente":
+   - Demografía: Busca validación social, humor para sus amigos o hacks imperdibles.
+   - Veredicto: 'Compartió (Share)', 'Guardó (Save)' o 'Deslizó (Swipe)'.
+   - A quién se lo mandaría por DM/WhatsApp y por qué.
+
+Por último, como VibeDirector:
+- Asigna un overallSurvivalScore (0-100% de probabilidad de sobrevivir al algoritmo).
+- Entrega un resumen analítico y 3 ajustes accionables (hookTweak, bodyPacingTweak, ctaOrLoopTweak).`;
+
+  const prompt = `CONTENIDO A TESTEAR EN EL FOCUS GROUP:
+- TEMA/PREMISA: ${contentToTest.topic || 'No especificado'}
+- GANCHO DE ENTRADA: ${contentToTest.hook || 'No especificado'}
+${contentToTest.scriptText ? `- GUION COMPLETO:\n${contentToTest.scriptText}` : ''}
+
+Ejecuta la simulación con los 3 arquetipos de espectadores y entrega el informe en el formato JSON especificado.`;
+
+  const responseSchema: Schema = {
+    type: Type.OBJECT,
+    properties: {
+      overallSurvivalScore: {
+        type: Type.INTEGER,
+        description: 'Porcentaje de supervivencia del video frente al algoritmo (0-100)'
+      },
+      verdictSummary: {
+        type: Type.STRING,
+        description: 'Resumen ejecutivo de VibeDirector sobre el focus group'
+      },
+      personas: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            personaName: {
+              type: Type.STRING,
+              enum: ['Scroller Compulsivo', 'Escéptico de Comentarios', 'Compartidor Frecuente']
+            },
+            avatarEmoji: { type: Type.STRING },
+            demographic: { type: Type.STRING },
+            actionTaken: {
+              type: Type.STRING,
+              enum: ['Deslizó (Swipe)', 'Se Quedó (Stay)', 'Comentó (Comment)', 'Compartió (Share)', 'Guardó (Save)']
+            },
+            timestampOrTrigger: { type: Type.STRING },
+            immediateReaction: { type: Type.STRING },
+            quote: { type: Type.STRING },
+            whyActionTaken: { type: Type.STRING },
+            improvementTip: { type: Type.STRING }
+          },
+          required: [
+            'personaName',
+            'avatarEmoji',
+            'demographic',
+            'actionTaken',
+            'timestampOrTrigger',
+            'immediateReaction',
+            'quote',
+            'whyActionTaken',
+            'improvementTip'
+          ]
+        }
+      },
+      keyVulnerabilities: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: 'Lista de 2 a 3 puntos ciegos o fallas de retención detectadas'
+      },
+      actionableTweaks: {
+        type: Type.OBJECT,
+        properties: {
+          hookTweak: { type: Type.STRING },
+          bodyPacingTweak: { type: Type.STRING },
+          ctaOrLoopTweak: { type: Type.STRING }
+        },
+        required: ['hookTweak', 'bodyPacingTweak', 'ctaOrLoopTweak']
+      }
+    },
+    required: ['overallSurvivalScore', 'verdictSummary', 'personas', 'keyVulnerabilities', 'actionableTweaks']
+  };
+
+  const response = await callGenerateContentWithFallback(ai, model, {
+    contents: prompt,
+    config: {
+      systemInstruction: simulationSystemInstruction,
+      temperature: 0.75,
+      thinkingConfig: { thinkingBudget: 2048 },
+      responseMimeType: 'application/json',
+      responseSchema
+    }
+  });
+
+  const parsed = JSON.parse(response.text || '{}');
+  return {
+    overallSurvivalScore: parsed.overallSurvivalScore || 50,
+    verdictSummary: parsed.verdictSummary || 'Evaluación completada.',
+    personas: parsed.personas || [],
+    keyVulnerabilities: parsed.keyVulnerabilities || [],
+    actionableTweaks: parsed.actionableTweaks || {
+      hookTweak: 'Refuerza el segundo 0 con mayor contraste visual.',
+      bodyPacingTweak: 'Elimina explicaciones antes de los 10 segundos.',
+      ctaOrLoopTweak: 'Conecta la última frase con la primera palabra del gancho.'
+    },
+    simulatedAt: Date.now()
+  };
+};
+
+export const generatePredictiveRetentionCurve = async (
+  content: {
+    scriptText: string;
+    hook?: string;
+    title?: string;
+    duration?: string;
+  },
+  adn: CreatorADN
+): Promise<PredictiveRetentionReport> => {
+  const ai = getGenAIClient(adn.apiKey);
+  const model = getResolvedModel(adn);
+  const systemPrompt = buildFullSystemPrompt(adn);
+
+  const retentionSystemInstruction = `${systemPrompt}
+
+MODO: SIMULADOR DE ANALÍTICAS DE RETENCIÓN DE TIKTOK (TIKTOK STUDIO PREDICTIVO)
+Eres un motor de cálculo algorítmico entrenado en millones de curvas de retención segundo a segundo de TikTok, Reels y YouTube Shorts.
+Tu trabajo es predecir con exactitud milimétrica la curva de retención (% de audiencia residual) de un guion o video, identificando:
+1. El porcentaje inicial en segundo 0.0 (siempre 100%).
+2. La caída violenta en los primeros 3 segundos (el filtro del hook: si es flojo cae bajo el 60%, si es genial retiene más del 80%).
+3. Los valles de abandono (puntos donde el espectador siente aburrimiento, ritmo plano, falta de B-roll o exceso de palabras).
+4. Los picos de re-visualización (rewatch spikes): momentos de impacto donde el espectador pausa, retrocede o lee texto rápido.
+5. El impacto del bucle infinito (loop): si el final conecta con el inicio, los espectadores residuales reinician el video sumando views extras.
+6. La curva comparativa de referencia (benchmark del nicho en TikTok para esa duración).
+
+Debes generar entre 10 y 20 puntos cronológicos ordenados secuencialmente por el campo 'second' desde 0 hasta el final del video.`;
+
+  const prompt = `Analiza este material y genera la curva de retención predictiva segundo a segundo:
+
+TÍTULO DEL VIDEO: "${content.title || 'Video sin título'}"
+GANCHO (0-2s): "${content.hook || 'No especificado'}"
+DURACIÓN ESTIMADA: "${content.duration || '30-40s'}"
+
+GUION / CONTENIDO COMPLETO:
+"""
+${content.scriptText}
+"""
+
+Calcula la curva de retención realista (0-100%) segundo a segundo, puntos de fuga críticos, picos de re-visualización y el veredicto para el algoritmo For You de TikTok.`;
+
+  const responseSchema: Schema = {
+    type: Type.OBJECT,
+    properties: {
+      hookSurvivalRate: {
+        type: Type.INTEGER,
+        description: 'Porcentaje de espectadores que sobrevive al segundo 3 (0-100)'
+      },
+      averageWatchTimeSeconds: {
+        type: Type.NUMBER,
+        description: 'Tiempo medio de visualización estimado en segundos'
+      },
+      totalDurationSeconds: {
+        type: Type.INTEGER,
+        description: 'Duración total calculada del video en segundos'
+      },
+      averageWatchPercentage: {
+        type: Type.INTEGER,
+        description: 'Porcentaje medio de retención del video total (0-100)'
+      },
+      completedWatchRate: {
+        type: Type.INTEGER,
+        description: 'Porcentaje de espectadores que llega al 100% de la duración'
+      },
+      rewatchSpikeRate: {
+        type: Type.INTEGER,
+        description: 'Porcentaje de visualizaciones repetidas por loop o rebobinado (0-50)'
+      },
+      loopViabilityScore: {
+        type: Type.INTEGER,
+        description: 'Puntuación de efectividad del bucle infinito (0-100)'
+      },
+      verdictSummary: {
+        type: Type.STRING,
+        description: 'Diagnóstico ejecutivo de VibeDirector sobre la viabilidad algorítmica'
+      },
+      retentionCurve: {
+        type: Type.ARRAY,
+        description: 'Puntos secuenciales de la curva de retención cronológica (10 a 20 puntos ordenados por segundo)',
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            second: { type: Type.INTEGER },
+            timestamp: { type: Type.STRING },
+            percentage: { type: Type.INTEGER },
+            benchmarkPercentage: { type: Type.INTEGER },
+            eventType: {
+              type: Type.STRING,
+              enum: ['hook', 'drop', 'spike', 'loop', 'neutral']
+            },
+            eventLabel: { type: Type.STRING },
+            annotation: { type: Type.STRING }
+          },
+          required: [
+            'second',
+            'timestamp',
+            'percentage',
+            'benchmarkPercentage',
+            'eventType',
+            'eventLabel',
+            'annotation'
+          ]
+        }
+      },
+      dropOffPoints: {
+        type: Type.ARRAY,
+        description: 'Puntos críticos donde la retención cae bruscamente',
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            timestamp: { type: Type.STRING },
+            second: { type: Type.INTEGER },
+            severity: {
+              type: Type.STRING,
+              enum: ['critica', 'media', 'leve']
+            },
+            reason: { type: Type.STRING },
+            fixAdvice: { type: Type.STRING }
+          },
+          required: ['timestamp', 'second', 'severity', 'reason', 'fixAdvice']
+        }
+      },
+      spikeMoments: {
+        type: Type.ARRAY,
+        description: 'Momentos donde el espectador rebobina o presta máxima atención',
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            timestamp: { type: Type.STRING },
+            second: { type: Type.INTEGER },
+            reason: { type: Type.STRING },
+            driver: { type: Type.STRING }
+          },
+          required: ['timestamp', 'second', 'reason', 'driver']
+        }
+      }
+    },
+    required: [
+      'hookSurvivalRate',
+      'averageWatchTimeSeconds',
+      'totalDurationSeconds',
+      'averageWatchPercentage',
+      'completedWatchRate',
+      'rewatchSpikeRate',
+      'loopViabilityScore',
+      'verdictSummary',
+      'retentionCurve',
+      'dropOffPoints',
+      'spikeMoments'
+    ]
+  };
+
+  const response = await callGenerateContentWithFallback(ai, model, {
+    contents: prompt,
+    config: {
+      systemInstruction: retentionSystemInstruction,
+      temperature: 0.7,
+      thinkingConfig: { thinkingBudget: 2048 },
+      responseMimeType: 'application/json',
+      responseSchema
+    }
+  });
+
+  const parsed = JSON.parse(response.text || '{}');
+  
+  // Ensure curve points are ordered by second
+  const rawCurve = Array.isArray(parsed.retentionCurve) ? parsed.retentionCurve : [];
+  const sortedCurve = [...rawCurve].sort((a, b) => (a.second || 0) - (b.second || 0));
+
+  return {
+    hookSurvivalRate: parsed.hookSurvivalRate ?? 70,
+    averageWatchTimeSeconds: parsed.averageWatchTimeSeconds ?? 20,
+    totalDurationSeconds: parsed.totalDurationSeconds ?? 35,
+    averageWatchPercentage: parsed.averageWatchPercentage ?? 65,
+    completedWatchRate: parsed.completedWatchRate ?? 38,
+    rewatchSpikeRate: parsed.rewatchSpikeRate ?? 12,
+    loopViabilityScore: parsed.loopViabilityScore ?? 50,
+    verdictSummary: parsed.verdictSummary || 'Curva de retención generada con éxito.',
+    retentionCurve: sortedCurve,
+    dropOffPoints: parsed.dropOffPoints || [],
+    spikeMoments: parsed.spikeMoments || [],
+    calculatedAt: Date.now()
+  };
+};

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export const SidebarADN: React.FC = () => {
-  const { creatorProfile, updateCreatorProfile, isSidebarOpen, setIsSidebarOpen, showToast } = useApp();
+  const { creatorProfile, updateCreatorProfile, isSidebarOpen, setIsSidebarOpen } = useApp();
 
   const [creatorHandle, setCreatorHandle] = useState(creatorProfile.creatorHandle);
   const [nicheStyle, setNicheStyle] = useState(creatorProfile.nicheStyle);
@@ -47,7 +47,6 @@ export const SidebarADN: React.FC = () => {
       customModelId: customModelId.trim(),
       apiKey: apiKey.trim()
     });
-    showToast('Perfil y ADN global guardados', 'success');
   };
 
   if (!isSidebarOpen) {

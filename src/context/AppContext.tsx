@@ -14,7 +14,9 @@ import type {
   ScriptStatus,
   AdvisorMessage,
   AdvisorSynthesis,
-  BrollItem
+  BrollItem,
+  AudienceSimulationResult,
+  PredictiveRetentionReport
 } from '../types';
 import confetti from 'canvas-confetti';
 
@@ -38,11 +40,14 @@ interface AppContextType {
   updateVideoProject: (id: string, partial: Partial<VideoProject>) => void;
   updateVideoStatus: (id: string, status: ScriptStatus) => void;
   deleteVideoProject: (id: string) => void;
+  duplicateVideoProject: (id: string) => VideoProject | null;
+  exportBackupJSON: () => void;
+  importBackupJSON: (jsonString: string) => boolean;
 
   // Active Video Pipeline Updaters
   setCurrentVideoHooks: (pkg: HookPackage) => void;
   setCurrentVideoSelectedHook: (hook: string) => void;
-  setCurrentVideoScript: (script: Script | null) => void;
+  setCurrentVideoScript: (script: Script | null, silent?: boolean) => void;
   setCurrentVideoDraftAudit: (audit: AuditorResult) => void;
   setCurrentVideoRoughCut: (roughCut: RoughCutResult) => void;
   setCurrentVideoFinalQuality: (finalQuality: FinalQualityResult) => void;
@@ -71,12 +76,25 @@ interface AppContextType {
   openAdvisorForVideo: (videoId?: string) => void;
   createVideoWithAdvisor: () => VideoProject;
   addAdvisorMessage: (videoId: string, message: AdvisorMessage) => void;
+  resetAdvisorChat: (videoId: string, greeting: AdvisorMessage) => void;
   applyAdvisorSynthesis: (
     videoId: string,
     synthesis: AdvisorSynthesis,
     hasClips?: boolean | null,
     clipsNotes?: string
   ) => void;
+
+  // Audience Simulator (Focus Group)
+  isSimulatorOpen: boolean;
+  setIsSimulatorOpen: (open: boolean) => void;
+  openAudienceSimulator: (videoId?: string) => void;
+  setCurrentVideoSimulation: (result: AudienceSimulationResult) => void;
+
+  // Predictive Retention Curve (TikTok Studio Simulado)
+  isRetentionModalOpen: boolean;
+  setIsRetentionModalOpen: (open: boolean) => void;
+  openRetentionModal: (videoId?: string) => void;
+  setCurrentVideoPredictiveRetention: (report: PredictiveRetentionReport) => void;
 
   // Modals & Panels
   isApiKeyModalOpen: boolean;
@@ -116,7 +134,9 @@ function createInitialVideo(title = 'Mi Primer Video', rawIdea = ''): VideoProje
     draftAudit: null,
     roughCut: null,
     finalQuality: null,
-    seo: null
+    seo: null,
+    audienceSimulation: null,
+    predictiveRetention: null
   };
 }
 
@@ -169,6 +189,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
+  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
+  const [isRetentionModalOpen, setIsRetentionModalOpen] = useState(false);
 
   // Sync creator profile
   useEffect(() => {
@@ -251,6 +273,61 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showToast('Video eliminado', 'info');
   };
 
+  const duplicateVideoProject = (id: string): VideoProject | null => {
+    const original = videoProjects.find((v) => v.id === id);
+    if (!original) return null;
+
+    const duplicated: VideoProject = {
+      ...JSON.parse(JSON.stringify(original)),
+      id: 'vid_' + Date.now(),
+      title: `${original.title} (Variante B)`,
+      status: 'idea',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    setVideoProjects((prev) => [duplicated, ...prev]);
+    setCurrentProjectId(duplicated.id);
+    showToast(`Video duplicado como "${duplicated.title}"`, 'success');
+    return duplicated;
+  };
+
+  const exportBackupJSON = () => {
+    const backupData = {
+      version: '3.0',
+      exportedAt: new Date().toISOString(),
+      creatorProfile,
+      videoProjects
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `VibeDirector_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast('Copia de seguridad descargada (.json)', 'success');
+  };
+
+  const importBackupJSON = (jsonString: string): boolean => {
+    try {
+      const parsed = JSON.parse(jsonString);
+      if (Array.isArray(parsed.videoProjects) && parsed.videoProjects.length > 0) {
+        setVideoProjects(parsed.videoProjects);
+        if (parsed.creatorProfile) {
+          setCreatorProfile((prev) => ({ ...prev, ...parsed.creatorProfile }));
+        }
+        setCurrentProjectId(parsed.videoProjects[0].id);
+        showToast('Copia de seguridad restaurada con éxito', 'success');
+        return true;
+      }
+      throw new Error('El archivo no contiene proyectos de video válidos');
+    } catch (e: any) {
+      showToast(e.message || 'Error al importar archivo de copia de seguridad', 'error');
+      return false;
+    }
+  };
+
   // Active Video Pipeline Updaters
   const setCurrentVideoHooks = (pkg: HookPackage) => {
     updateVideoProject(currentVideo.id, {
@@ -265,12 +342,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     updateVideoProject(currentVideo.id, { selectedHook: hook });
   };
 
-  const setCurrentVideoScript = (script: Script | null) => {
+  const setCurrentVideoScript = (script: Script | null, silent = false) => {
     updateVideoProject(currentVideo.id, {
       script,
       status: currentVideo.status === 'idea' ? 'ready_to_record' : currentVideo.status
     });
-    if (script) {
+    if (script && !silent) {
       try {
         confetti({
           particleCount: 40,
@@ -381,6 +458,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
+  const resetAdvisorChat = (videoId: string, greeting: AdvisorMessage) => {
+    setVideoProjects((prev) =>
+      prev.map((v) => {
+        if (v.id !== videoId) return v;
+        return {
+          ...v,
+          advisorChat: [greeting],
+          updatedAt: Date.now()
+        };
+      })
+    );
+  };
+
   const applyAdvisorSynthesis = (
     videoId: string,
     synthesis: AdvisorSynthesis,
@@ -447,6 +537,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     showToast('¡Estrategia y tomas B-Roll cargadas al proyecto!', 'success');
   };
 
+  const openAudienceSimulator = (videoId?: string) => {
+    if (videoId) {
+      selectVideoProject(videoId);
+    }
+    setIsSimulatorOpen(true);
+  };
+
+  const setCurrentVideoSimulation = (audienceSimulation: AudienceSimulationResult) => {
+    updateVideoProject(currentVideo.id, { audienceSimulation });
+    try {
+      confetti({
+        particleCount: 35,
+        spread: 60,
+        origin: { y: 0.8 },
+        colors: ['#8b5cf6', '#06b6d4', '#10b981']
+      });
+    } catch {}
+    showToast(`Simulación de audiencia guardada en "${currentVideo.title}"`, 'success');
+  };
+
+  const openRetentionModal = (videoId?: string) => {
+    if (videoId) {
+      selectVideoProject(videoId);
+    }
+    setIsRetentionModalOpen(true);
+  };
+
+  const setCurrentVideoPredictiveRetention = (predictiveRetention: PredictiveRetentionReport) => {
+    updateVideoProject(currentVideo.id, { predictiveRetention });
+    try {
+      confetti({
+        particleCount: 35,
+        spread: 65,
+        origin: { y: 0.75 },
+        colors: ['#06b6d4', '#8b5cf6', '#10b981']
+      });
+    } catch {}
+    showToast(`Curva predictiva de retención calculada para "${currentVideo.title}"`, 'success');
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -460,6 +590,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateVideoProject,
         updateVideoStatus,
         deleteVideoProject,
+        duplicateVideoProject,
+        exportBackupJSON,
+        importBackupJSON,
         setCurrentVideoHooks,
         setCurrentVideoSelectedHook,
         setCurrentVideoScript,
@@ -487,7 +620,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         openAdvisorForVideo,
         createVideoWithAdvisor,
         addAdvisorMessage,
-        applyAdvisorSynthesis
+        resetAdvisorChat,
+        applyAdvisorSynthesis,
+        isSimulatorOpen,
+        setIsSimulatorOpen,
+        openAudienceSimulator,
+        setCurrentVideoSimulation,
+        isRetentionModalOpen,
+        setIsRetentionModalOpen,
+        openRetentionModal,
+        setCurrentVideoPredictiveRetention
       }}
     >
       {children}
