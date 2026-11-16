@@ -39,7 +39,8 @@ export const ContentAdvisorModal: React.FC = () => {
     applyAdvisorSynthesis,
     setActiveTab,
     showToast,
-    setIsApiKeyModalOpen
+    setIsApiKeyModalOpen,
+    isKeyConfigured
   } = useApp();
 
   const [input, setInput] = useState('');
@@ -66,7 +67,7 @@ export const ContentAdvisorModal: React.FC = () => {
     const cleanText = textToSend.trim();
     if (!cleanText || isLoading) return;
 
-    if (!creatorProfile.apiKey) {
+    if (!isKeyConfigured) {
       showToast('Configura tu Gemini API Key para hablar con el Asesor', 'error');
       setIsApiKeyModalOpen(true);
       return;

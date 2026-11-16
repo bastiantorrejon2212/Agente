@@ -25,7 +25,8 @@ export const PredictiveRetentionModal: React.FC = () => {
     finishBackgroundTask,
     backgroundTasks,
     setIsApiKeyModalOpen,
-    setActiveTab
+    setActiveTab,
+    isKeyConfigured
   } = useApp();
 
   const [scriptInput, setScriptInput] = useState('');
@@ -62,7 +63,7 @@ export const PredictiveRetentionModal: React.FC = () => {
       return;
     }
 
-    if (!creatorProfile.apiKey) {
+    if (!isKeyConfigured) {
       showToast('Configura tu Gemini API Key antes de calcular la curva', 'error');
       setIsApiKeyModalOpen(true);
       return;

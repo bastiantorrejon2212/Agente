@@ -58,14 +58,28 @@ export function getResolvedModel(adn: CreatorADN): string {
   return adn.aiModel;
 }
 
-function getGenAIClient(apiKey: string): GoogleGenAI {
-  if (!apiKey || !apiKey.trim()) {
-    throw new Error('API Key no encontrada. Por favor configura tu Gemini API Key en el panel lateral o en Configuración.');
+function getGenAIClient(apiKey?: string): GoogleGenAI | null {
+  if (!apiKey || !apiKey.trim() || apiKey.trim().length <= 5) {
+    return null;
   }
   return new GoogleGenAI({
     apiKey: apiKey.trim(),
     apiVersion: 'v1beta'
   });
+}
+
+// Check if Vercel serverless backend has GEMINI_API_KEY configured privately
+export async function checkServerKeyStatus(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/gemini', { method: 'GET' });
+    if (res.ok) {
+      const data = await res.json();
+      return Boolean(data.hasServerKey);
+    }
+  } catch {
+    // Offline or static host
+  }
+  return false;
 }
 
 // Convert File to Base64
@@ -83,12 +97,85 @@ export function fileToBase64(file: File): Promise<string> {
 }
 
 // Direct File API Upload for heavy files (>15MB up to 2GB)
+// Uses Vercel Serverless proxy to keep API Key 100% private
 export async function uploadToGoogleFileAPI(
   file: File,
-  apiKey: string,
+  apiKey?: string,
   onProgress?: (pct: number) => void
 ): Promise<{ fileUri: string; mimeType: string }> {
-  const url = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`;
+  // If client has no API key or server mode is preferred, initiate upload via Vercel /api/gemini
+  if (!apiKey || apiKey.trim().length <= 5) {
+    try {
+      const initResp = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'initUpload',
+          fileInfo: {
+            fileName: file.name,
+            fileSize: file.size,
+            mimeType: file.type || 'video/mp4'
+          }
+        })
+      });
+
+      if (initResp.ok) {
+        const initData = await initResp.json();
+        if (initData.fileUri) {
+          return { fileUri: initData.fileUri, mimeType: initData.mimeType || file.type || 'video/mp4' };
+        }
+
+        const uploadUrl = initData.uploadUrl;
+        if (uploadUrl) {
+          return new Promise((resolve, reject) => {
+            const uploadXhr = new XMLHttpRequest();
+            uploadXhr.open('POST', uploadUrl, true);
+            uploadXhr.setRequestHeader('X-Goog-Upload-Offset', '0');
+            uploadXhr.setRequestHeader('X-Goog-Upload-Command', 'upload, finalize');
+            uploadXhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+
+            if (uploadXhr.upload && onProgress) {
+              uploadXhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                  const percent = Math.round((event.loaded / event.total) * 100);
+                  onProgress(percent);
+                }
+              };
+            }
+
+            uploadXhr.onload = () => {
+              if (uploadXhr.status >= 200 && uploadXhr.status < 300) {
+                try {
+                  const res = JSON.parse(uploadXhr.responseText);
+                  resolve({
+                    fileUri: res.file?.uri || res.uri,
+                    mimeType: res.file?.mimeType || file.type || 'video/mp4'
+                  });
+                } catch (err) {
+                  reject(err);
+                }
+              } else {
+                reject(new Error(`Fallo en la subida a Google: ${uploadXhr.statusText}`));
+              }
+            };
+
+            uploadXhr.onerror = () => reject(new Error('Error de red al subir el video a Google'));
+            uploadXhr.send(file);
+          });
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Upload Proxy] No se pudo usar proxy de subida, probando directo...', e);
+    }
+  }
+
+  // Fallback to direct upload if client provided an explicit API key
+  const effectiveKey = apiKey?.trim();
+  if (!effectiveKey) {
+    throw new Error('No se encontró API Key para la subida de video. Configura GEMINI_API_KEY en Vercel.');
+  }
+
+  const url = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(effectiveKey)}`;
   
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -154,21 +241,74 @@ export async function uploadToGoogleFileAPI(
   });
 }
 
-// Helper for resilient generation with automatic Free-Tier fallback
+// Helper for resilient generation with Serverless Privacy & Automatic Free-Tier fallback
 async function callGenerateContentWithFallback(
-  ai: GoogleGenAI,
+  ai: GoogleGenAI | null,
   initialModel: string,
   params: {
     contents: any;
     config: any;
-  }
-) {
+  },
+  clientApiKey?: string
+): Promise<{ text: string; [key: string]: any }> {
+  // 1. Try serverless backend proxy (/api/gemini)
+  // This keeps the Gemini API key 100% PRIVATE on Vercel: zero keys in the browser!
   try {
-    return await ai.models.generateContent({
+    const res = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        action: 'generateContent',
+        model: initialModel,
+        contents: params.contents,
+        config: params.config,
+        clientApiKey: clientApiKey || undefined
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        text: data.text || '',
+        ...data
+      };
+    }
+
+    // If server responded with an application/AI error (e.g. quota, not found)
+    if (res.status !== 404) {
+      const errorJson = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(errorJson.error || `Error del servidor de IA (${res.status})`);
+    }
+  } catch (serverErr: any) {
+    // If not a 404 or network unavailable, re-throw the server error
+    if (!serverErr.message?.includes('404') && !serverErr.message?.includes('Failed to fetch') && !serverErr.message?.includes('NetworkError')) {
+      throw serverErr;
+    }
+    console.warn('[Gemini Client] /api/gemini no disponible, intentando SDK directo...');
+  }
+
+  // 2. Direct client fallback (if user provided a key in the browser)
+  const clientKey = clientApiKey || (ai as any)?.apiKey;
+  const directAi = ai || (clientKey ? getGenAIClient(clientKey) : null);
+
+  if (!directAi) {
+    throw new Error(
+      'No se encontró ninguna API Key de Gemini. Configura la variable de entorno GEMINI_API_KEY en Vercel (100% privada) o introduce tu clave en la app.'
+    );
+  }
+
+  try {
+    const res = await directAi.models.generateContent({
       model: initialModel,
       contents: params.contents,
       config: params.config
     });
+    return {
+      ...res,
+      text: res.text || ''
+    };
   } catch (err: any) {
     const errorMsg = String(err?.message || err);
     const isModelNotFoundOrQuota =
@@ -181,12 +321,16 @@ async function callGenerateContentWithFallback(
       errorMsg.includes('Quota exceeded');
 
     if (isModelNotFoundOrQuota && initialModel !== 'gemini-3.8-flash') {
-      console.warn(`[VibeDirector] Modelo ${initialModel} no disponible o sin cuota. Fallback a gemini-3.8-flash...`);
-      return await ai.models.generateContent({
+      console.warn(`[VibeDirector] Fallback a gemini-3.8-flash...`);
+      const fallbackRes = await directAi.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: params.contents,
         config: params.config
       });
+      return {
+        ...fallbackRes,
+        text: fallbackRes.text || ''
+      };
     }
     throw err;
   }
@@ -259,16 +403,21 @@ Cada tarjeta debe tener la Trinidad del Gancho:
     required: ['hooks']
   };
 
-  const response = await callGenerateContentWithFallback(ai, model, {
-    contents: prompt,
-    config: {
-      systemInstruction: systemPrompt,
-      temperature: 0.75,
-      thinkingConfig: { thinkingBudget: 2048 },
-      responseMimeType: 'application/json',
-      responseSchema
-    }
-  });
+  const response = await callGenerateContentWithFallback(
+    ai,
+    model,
+    {
+      contents: prompt,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.75,
+        thinkingConfig: { thinkingBudget: 2048 },
+        responseMimeType: 'application/json',
+        responseSchema
+      }
+    },
+    adn.apiKey
+  );
 
   const parsed = JSON.parse(response.text || '{}');
   const hooksList: HookItem[] = parsed.hooks || [];
@@ -361,16 +510,21 @@ REGLAS ESTRICTAS:
     ]
   };
 
-  const response = await callGenerateContentWithFallback(ai, model, {
-    contents: prompt,
-    config: {
-      systemInstruction: systemPrompt,
-      temperature: 0.75,
-      thinkingConfig: { thinkingBudget: 2048 },
-      responseMimeType: 'application/json',
-      responseSchema
-    }
-  });
+  const response = await callGenerateContentWithFallback(
+    ai,
+    model,
+    {
+      contents: prompt,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.75,
+        thinkingConfig: { thinkingBudget: 2048 },
+        responseMimeType: 'application/json',
+        responseSchema
+      }
+    },
+    adn.apiKey
+  );
 
   const parsed = JSON.parse(response.text || '{}');
 
@@ -498,16 +652,21 @@ Sé implacable. Detecta:
     required: ['retentionScore', 'scoreCategory', 'filterlessDiagnosis', 'scrollAlerts', 'reEngineeredScript']
   };
 
-  const response = await callGenerateContentWithFallback(ai, model, {
-    contents,
-    config: {
-      systemInstruction: systemPrompt,
-      temperature: 0.75,
-      thinkingConfig: { thinkingBudget: 2048 },
-      responseMimeType: 'application/json',
-      responseSchema
-    }
-  });
+  const response = await callGenerateContentWithFallback(
+    ai,
+    model,
+    {
+      contents,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.75,
+        thinkingConfig: { thinkingBudget: 2048 },
+        responseMimeType: 'application/json',
+        responseSchema
+      }
+    },
+    adn.apiKey
+  );
 
   const parsed = JSON.parse(response.text || '{}');
 
@@ -632,16 +791,21 @@ Debes entregar recomendaciones directas de edición de montaje:
     required: ['retentionScore', 'silenceCuts', 'insertions', 'sceneReordering', 'summaryAdvice']
   };
 
-  const response = await callGenerateContentWithFallback(ai, model, {
-    contents,
-    config: {
-      systemInstruction: systemPrompt,
-      temperature: 0.75,
-      thinkingConfig: { thinkingBudget: 2048 },
-      responseMimeType: 'application/json',
-      responseSchema
-    }
-  });
+  const response = await callGenerateContentWithFallback(
+    ai,
+    model,
+    {
+      contents,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.75,
+        thinkingConfig: { thinkingBudget: 2048 },
+        responseMimeType: 'application/json',
+        responseSchema
+      }
+    },
+    adn.apiKey
+  );
 
   const parsed = JSON.parse(response.text || '{}');
   return {
@@ -739,16 +903,21 @@ Evalúa con estándares de retención viral:
     ]
   };
 
-  const response = await callGenerateContentWithFallback(ai, model, {
-    contents,
-    config: {
-      systemInstruction: systemPrompt,
-      temperature: 0.75,
-      thinkingConfig: { thinkingBudget: 2048 },
-      responseMimeType: 'application/json',
-      responseSchema
-    }
-  });
+  const response = await callGenerateContentWithFallback(
+    ai,
+    model,
+    {
+      contents,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.75,
+        thinkingConfig: { thinkingBudget: 2048 },
+        responseMimeType: 'application/json',
+        responseSchema
+      }
+    },
+    adn.apiKey
+  );
 
   const parsed = JSON.parse(response.text || '{}');
   return {
@@ -810,16 +979,21 @@ REQUERIMIENTOS:
     required: ['copies', 'microKeywords', 'hashtags', 'pinnedComments']
   };
 
-  const response = await callGenerateContentWithFallback(ai, model, {
-    contents: prompt,
-    config: {
-      systemInstruction: systemPrompt,
-      temperature: 0.75,
-      thinkingConfig: { thinkingBudget: 2048 },
-      responseMimeType: 'application/json',
-      responseSchema
-    }
-  });
+  const response = await callGenerateContentWithFallback(
+    ai,
+    model,
+    {
+      contents: prompt,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature: 0.75,
+        thinkingConfig: { thinkingBudget: 2048 },
+        responseMimeType: 'application/json',
+        responseSchema
+      }
+    },
+    adn.apiKey
+  );
 
   const parsed = JSON.parse(response.text || '{}');
   return {
@@ -946,16 +1120,21 @@ Responde como VibeDirector analizando la respuesta del creador. Aporta valor est
     required: ['message', 'suggestedQuickReplies']
   };
 
-  const response = await callGenerateContentWithFallback(ai, model, {
-    contents: prompt,
-    config: {
-      systemInstruction: advisorSystemInstruction,
-      temperature: 0.75,
-      thinkingConfig: { thinkingBudget: 2048 },
-      responseMimeType: 'application/json',
-      responseSchema
-    }
-  });
+  const response = await callGenerateContentWithFallback(
+    ai,
+    model,
+    {
+      contents: prompt,
+      config: {
+        systemInstruction: advisorSystemInstruction,
+        temperature: 0.75,
+        thinkingConfig: { thinkingBudget: 2048 },
+        responseMimeType: 'application/json',
+        responseSchema
+      }
+    },
+    adn.apiKey
+  );
 
   const parsed = JSON.parse(response.text || '{}');
   return {
@@ -1076,16 +1255,21 @@ Ejecuta la simulación con los 3 arquetipos de espectadores y entrega el informe
     required: ['overallSurvivalScore', 'verdictSummary', 'personas', 'keyVulnerabilities', 'actionableTweaks']
   };
 
-  const response = await callGenerateContentWithFallback(ai, model, {
-    contents: prompt,
-    config: {
-      systemInstruction: simulationSystemInstruction,
-      temperature: 0.75,
-      thinkingConfig: { thinkingBudget: 2048 },
-      responseMimeType: 'application/json',
-      responseSchema
-    }
-  });
+  const response = await callGenerateContentWithFallback(
+    ai,
+    model,
+    {
+      contents: prompt,
+      config: {
+        systemInstruction: simulationSystemInstruction,
+        temperature: 0.75,
+        thinkingConfig: { thinkingBudget: 2048 },
+        responseMimeType: 'application/json',
+        responseSchema
+      }
+    },
+    adn.apiKey
+  );
 
   const parsed = JSON.parse(response.text || '{}');
   return {
@@ -1253,16 +1437,21 @@ Calcula la curva de retención realista (0-100%) segundo a segundo, puntos de fu
     ]
   };
 
-  const response = await callGenerateContentWithFallback(ai, model, {
-    contents: prompt,
-    config: {
-      systemInstruction: retentionSystemInstruction,
-      temperature: 0.7,
-      thinkingConfig: { thinkingBudget: 2048 },
-      responseMimeType: 'application/json',
-      responseSchema
-    }
-  });
+  const response = await callGenerateContentWithFallback(
+    ai,
+    model,
+    {
+      contents: prompt,
+      config: {
+        systemInstruction: retentionSystemInstruction,
+        temperature: 0.7,
+        thinkingConfig: { thinkingBudget: 2048 },
+        responseMimeType: 'application/json',
+        responseSchema
+      }
+    },
+    adn.apiKey
+  );
 
   const parsed = JSON.parse(response.text || '{}');
   

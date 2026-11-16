@@ -26,7 +26,8 @@ export const AudienceSimulatorModal: React.FC = () => {
     finishBackgroundTask,
     backgroundTasks,
     setIsApiKeyModalOpen,
-    setActiveTab
+    setActiveTab,
+    isKeyConfigured
   } = useApp();
 
   const [hookInput, setHookInput] = useState(currentVideo.selectedHook || '');
@@ -62,7 +63,7 @@ export const AudienceSimulatorModal: React.FC = () => {
       return;
     }
 
-    if (!creatorProfile.apiKey) {
+    if (!isKeyConfigured) {
       showToast('Configura tu Gemini API Key para correr el simulador', 'error');
       setIsApiKeyModalOpen(true);
       return;

@@ -19,6 +19,7 @@ import type {
   PredictiveRetentionReport
 } from '../types';
 import confetti from 'canvas-confetti';
+import { checkServerKeyStatus } from '../services/geminiService';
 
 interface Toast {
   id: string;
@@ -95,6 +96,10 @@ interface AppContextType {
   setIsRetentionModalOpen: (open: boolean) => void;
   openRetentionModal: (videoId?: string) => void;
   setCurrentVideoPredictiveRetention: (report: PredictiveRetentionReport) => void;
+
+  // Gemini API Security (Vercel Serverless Protection)
+  hasServerKey: boolean;
+  isKeyConfigured: boolean;
 
   // Modals & Panels
   isApiKeyModalOpen: boolean;
@@ -191,6 +196,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [isRetentionModalOpen, setIsRetentionModalOpen] = useState(false);
+  const [hasServerKey, setHasServerKey] = useState(false);
+
+  useEffect(() => {
+    checkServerKeyStatus().then((available) => {
+      setHasServerKey(available);
+    });
+  }, []);
+
+  const isKeyConfigured = Boolean(
+    hasServerKey || (creatorProfile.apiKey && creatorProfile.apiKey.trim().length > 5)
+  );
 
   // Sync creator profile
   useEffect(() => {
@@ -629,7 +645,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isRetentionModalOpen,
         setIsRetentionModalOpen,
         openRetentionModal,
-        setCurrentVideoPredictiveRetention
+        setCurrentVideoPredictiveRetention,
+        hasServerKey,
+        isKeyConfigured
       }}
     >
       {children}

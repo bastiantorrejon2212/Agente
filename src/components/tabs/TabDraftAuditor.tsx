@@ -29,7 +29,8 @@ export const TabDraftAuditor: React.FC = () => {
     finishBackgroundTask,
     backgroundTasks,
     setIsApiKeyModalOpen,
-    openRetentionModal
+    openRetentionModal,
+    isKeyConfigured
   } = useApp();
 
   const [mode, setMode] = useState<'text' | 'file'>('text');
@@ -65,7 +66,7 @@ export const TabDraftAuditor: React.FC = () => {
       return;
     }
 
-    if (!creatorProfile.apiKey) {
+    if (!isKeyConfigured) {
       showToast('Configura tu Gemini API Key antes de auditar', 'error');
       setIsApiKeyModalOpen(true);
       return;

@@ -11,11 +11,12 @@ import {
   Eye,
   EyeOff,
   ChevronLeft,
-  Info
+  Info,
+  ShieldCheck
 } from 'lucide-react';
 
 export const SidebarADN: React.FC = () => {
-  const { creatorProfile, updateCreatorProfile, isSidebarOpen, setIsSidebarOpen } = useApp();
+  const { creatorProfile, updateCreatorProfile, isSidebarOpen, setIsSidebarOpen, hasServerKey } = useApp();
 
   const [creatorHandle, setCreatorHandle] = useState(creatorProfile.creatorHandle);
   const [nicheStyle, setNicheStyle] = useState(creatorProfile.nicheStyle);
@@ -167,16 +168,24 @@ export const SidebarADN: React.FC = () => {
 
         {/* API Key */}
         <div className="pt-2 border-t border-zinc-800">
-          <label className="block text-[11px] font-bold text-zinc-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-            <Key className="w-3.5 h-3.5 text-amber-400" />
-            <span>Gemini API Key</span>
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Key className="w-3.5 h-3.5 text-amber-400" />
+              <span>Gemini API Key</span>
+            </label>
+            {hasServerKey && (
+              <span className="text-[9px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                <ShieldCheck className="w-2.5 h-2.5" />
+                <span>Privada en Servidor</span>
+              </span>
+            )}
+          </div>
           <div className="relative">
             <input
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="AIzaSy..."
+              placeholder={hasServerKey ? '●●●●●●●●●●●● (Protegida en Vercel)' : 'AIzaSy...'}
               className="w-full bg-zinc-950 border border-zinc-800 focus:border-violet-500 rounded-xl px-3 py-2 text-xs text-zinc-100 placeholder-zinc-600 outline-none font-mono pr-8 transition-colors"
             />
             <button
@@ -189,7 +198,11 @@ export const SidebarADN: React.FC = () => {
           </div>
           <p className="text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
             <Info className="w-3 h-3 shrink-0" />
-            <span>Se guarda en tu navegador y aplica a todos tus videos.</span>
+            <span>
+              {hasServerKey
+                ? 'Protegida en las variables de entorno de Vercel (Oculta para visitantes).'
+                : 'Se guarda en tu navegador y aplica a todos tus videos.'}
+            </span>
           </p>
         </div>
 

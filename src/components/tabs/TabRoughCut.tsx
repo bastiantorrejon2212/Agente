@@ -25,7 +25,8 @@ export const TabRoughCut: React.FC = () => {
     startBackgroundTask,
     finishBackgroundTask,
     backgroundTasks,
-    setIsApiKeyModalOpen
+    setIsApiKeyModalOpen,
+    isKeyConfigured
   } = useApp();
 
   const [mode, setMode] = useState<'file' | 'text'>('file');
@@ -92,7 +93,7 @@ export const TabRoughCut: React.FC = () => {
       return;
     }
 
-    if (!creatorProfile.apiKey) {
+    if (!isKeyConfigured) {
       showToast('Configura tu Gemini API Key antes de analizar', 'error');
       setIsApiKeyModalOpen(true);
       return;

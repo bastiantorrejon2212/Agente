@@ -10,14 +10,14 @@ import {
   Plus,
   Brain,
   Users,
-  TrendingUp
+  TrendingUp,
+  ShieldCheck
 } from 'lucide-react';
 import { ProjectManagerModal } from './ProjectManagerModal';
 
 export const Header: React.FC = () => {
   const {
     currentVideo,
-    creatorProfile,
     backgroundTasks,
     setIsApiKeyModalOpen,
     isSidebarOpen,
@@ -25,12 +25,13 @@ export const Header: React.FC = () => {
     openAdvisorForVideo,
     createVideoWithAdvisor,
     openAudienceSimulator,
-    openRetentionModal
+    openRetentionModal,
+    hasServerKey,
+    isKeyConfigured
   } = useApp();
 
   const [isProjectsModalOpen, setIsProjectsModalOpen] = useState(false);
 
-  const hasApiKey = Boolean(creatorProfile.apiKey && creatorProfile.apiKey.trim().length > 5);
   const runningTasks = backgroundTasks.filter((t) => t.status === 'running');
   const hasRunningTasks = runningTasks.length > 0;
 
@@ -157,19 +158,37 @@ export const Header: React.FC = () => {
           <button
             onClick={() => setIsApiKeyModalOpen(true)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
-              hasApiKey
+              hasServerKey
+                ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
+                : isKeyConfigured
                 ? 'bg-zinc-900 border-zinc-800 hover:border-emerald-500/40 text-zinc-300'
                 : 'bg-amber-950/30 border-amber-500/50 text-amber-300 animate-pulse'
             }`}
-            title={hasApiKey ? 'Gemini API Key configurada' : 'Configurar Gemini API Key'}
+            title={
+              hasServerKey
+                ? 'Gemini API Key 100% protegida en Vercel (servidor privado)'
+                : isKeyConfigured
+                ? 'Gemini Conectado'
+                : 'Configurar Gemini API Key'
+            }
           >
-            <Key className="w-3.5 h-3.5" />
+            {hasServerKey ? (
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            ) : (
+              <Key className="w-3.5 h-3.5" />
+            )}
             <span className="hidden sm:inline">
-              {hasApiKey ? 'Gemini Conectado' : 'Conectar API Key'}
+              {hasServerKey
+                ? 'API Privada (Vercel)'
+                : isKeyConfigured
+                ? 'Gemini Conectado'
+                : 'Conectar API Key'}
             </span>
             <span
               className={`w-2 h-2 rounded-full ${
-                hasApiKey ? 'bg-emerald-400 shadow-sm shadow-emerald-400' : 'bg-amber-400'
+                isKeyConfigured
+                  ? 'bg-emerald-400 shadow-sm shadow-emerald-400'
+                  : 'bg-amber-400'
               }`}
             />
           </button>

@@ -3,7 +3,14 @@ import { useApp } from '../context/AppContext';
 import { Key, ShieldCheck, ExternalLink, X, Check, Eye, EyeOff } from 'lucide-react';
 
 export const ApiKeyModal: React.FC = () => {
-  const { isApiKeyModalOpen, setIsApiKeyModalOpen, creatorProfile, updateCreatorProfile, showToast } = useApp();
+  const {
+    isApiKeyModalOpen,
+    setIsApiKeyModalOpen,
+    creatorProfile,
+    updateCreatorProfile,
+    showToast,
+    hasServerKey
+  } = useApp();
   const [keyInput, setKeyInput] = useState(creatorProfile.apiKey || '');
   const [showKey, setShowKey] = useState(false);
 
@@ -11,13 +18,18 @@ export const ApiKeyModal: React.FC = () => {
 
   const handleSave = () => {
     const cleanKey = keyInput.trim();
-    if (!cleanKey) {
+    if (!cleanKey && !hasServerKey) {
       showToast('Por favor introduce una API Key válida', 'error');
       return;
     }
 
     updateCreatorProfile({ apiKey: cleanKey });
-    showToast('API Key guardada de forma segura en tu navegador', 'success');
+    showToast(
+      cleanKey
+        ? 'API Key guardada en tu navegador'
+        : 'Usando clave privada de Vercel',
+      'success'
+    );
     setIsApiKeyModalOpen(false);
   };
 
@@ -46,26 +58,51 @@ export const ApiKeyModal: React.FC = () => {
         </div>
 
         <div className="py-5 space-y-4">
-          <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 leading-relaxed space-y-2">
-            <div className="flex items-center gap-2 text-cyan-400 font-semibold">
-              <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span>100% Privado y Directo a Google</span>
+          {hasServerKey ? (
+            <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-xs text-emerald-200 leading-relaxed space-y-2">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                <ShieldCheck className="w-5 h-5 shrink-0" />
+                <span>API Key Protegida en Servidor Vercel (100% Privada)</span>
+              </div>
+              <p>
+                Tu clave de Gemini está configurada de forma segura en las variables de entorno de <strong>Vercel</strong> (<code className="bg-emerald-950 px-1 py-0.5 rounded text-emerald-300 font-mono">GEMINI_API_KEY</code>).
+              </p>
+              <p className="text-[11px] text-emerald-300/80">
+                🔒 Las llamadas se procesan en el backend serverless. <strong>Ningún visitante puede ver, inspeccionar en DevTools ni extraer tu clave</strong> desde el navegador.
+              </p>
             </div>
-            <p>
-              Tu clave se almacena exclusivamente en el almacenamiento local de tu navegador (LocalStorage). Las peticiones van directo al endpoint oficial de Google Gemini sin servidores intermedios.
-            </p>
-          </div>
+          ) : (
+            <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 leading-relaxed space-y-2">
+              <div className="flex items-center gap-2 text-cyan-400 font-semibold">
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <span>Modo Privado en Vercel Recomendado</span>
+              </div>
+              <p>
+                Para que tu clave sea 100% privada e invisible para cualquier visitante, añade la variable de entorno <code className="bg-zinc-900 px-1.5 py-0.5 rounded text-cyan-300 font-mono font-bold">GEMINI_API_KEY</code> en tu panel de Vercel (<strong>Project Settings → Environment Variables</strong>).
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                También puedes ingresar una clave manual aquí abajo para pruebas en este navegador.
+              </p>
+            </div>
+          )}
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2">
-              Google Gemini API Key
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                {hasServerKey ? 'Clave Manual de Anulación (Opcional)' : 'Google Gemini API Key'}
+              </label>
+              {hasServerKey && (
+                <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Activa en Servidor
+                </span>
+              )}
+            </div>
             <div className="relative">
               <input
                 type={showKey ? 'text' : 'password'}
                 value={keyInput}
                 onChange={(e) => setKeyInput(e.target.value)}
-                placeholder="AIzaSy..."
+                placeholder={hasServerKey ? '●●●●●●●●●●●● (Protegida en Servidor Vercel)' : 'AIzaSy...'}
                 className="w-full bg-zinc-950 border border-zinc-800 focus:border-violet-500 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-600 outline-none font-mono pr-10 transition-colors"
               />
               <button

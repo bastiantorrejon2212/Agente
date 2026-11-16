@@ -41,7 +41,8 @@ export const TabScriptArchitect: React.FC = () => {
     setIsApiKeyModalOpen,
     openAdvisorForVideo,
     openAudienceSimulator,
-    openRetentionModal
+    openRetentionModal,
+    isKeyConfigured
   } = useApp();
 
   const [hookInput, setHookInput] = useState(currentVideo.selectedHook || '');
@@ -70,7 +71,7 @@ export const TabScriptArchitect: React.FC = () => {
       return;
     }
 
-    if (!creatorProfile.apiKey) {
+    if (!isKeyConfigured) {
       showToast('Configura tu Gemini API Key antes de generar', 'error');
       setIsApiKeyModalOpen(true);
       return;

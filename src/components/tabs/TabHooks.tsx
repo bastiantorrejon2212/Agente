@@ -32,7 +32,8 @@ export const TabHooks: React.FC = () => {
     backgroundTasks,
     setIsApiKeyModalOpen,
     openAdvisorForVideo,
-    openAudienceSimulator
+    openAudienceSimulator,
+    isKeyConfigured
   } = useApp();
 
   const [rawIdea, setRawIdea] = useState(currentVideo.rawIdea || '');
@@ -60,7 +61,7 @@ export const TabHooks: React.FC = () => {
       return;
     }
 
-    if (!creatorProfile.apiKey) {
+    if (!isKeyConfigured) {
       showToast('Configura tu Gemini API Key antes de generar', 'error');
       setIsApiKeyModalOpen(true);
       return;

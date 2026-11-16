@@ -24,7 +24,8 @@ export const TabFinalQuality: React.FC = () => {
     startBackgroundTask,
     finishBackgroundTask,
     backgroundTasks,
-    setIsApiKeyModalOpen
+    setIsApiKeyModalOpen,
+    isKeyConfigured
   } = useApp();
 
   const [mode, setMode] = useState<'file' | 'text'>('file');
@@ -71,7 +72,7 @@ export const TabFinalQuality: React.FC = () => {
       return;
     }
 
-    if (!creatorProfile.apiKey) {
+    if (!isKeyConfigured) {
       showToast('Configura tu Gemini API Key antes de evaluar', 'error');
       setIsApiKeyModalOpen(true);
       return;
